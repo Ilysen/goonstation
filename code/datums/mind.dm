@@ -228,6 +228,12 @@ datum/mind
 				return TRUE
 		return FALSE
 
+	/// Returns the antagonist datum of a defined role.
+	proc/get_antagonist(role_id)
+		for (var/datum/antagonist/A as anything in src.antagonists)
+			if (A.id == role_id)
+				return A
+
 	disposing()
 		logTheThing("debug", null, null, "<b>Mind</b> Mind for \[[src.key ? src.key : "NO KEY"]] deleted!")
 		Z_LOG_DEBUG("Mind/Disposing", "Mind \ref[src] [src.key ? "([src.key])" : ""] deleted")
