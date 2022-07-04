@@ -91,7 +91,7 @@ export const TelescienceConsole = (props, context) => {
           <Button
             textAlign="center"
             icon="sign-in-alt"
-            onClick={() => act('send')}>
+            onClick={() => act('receive')}>
             Receive
           </Button>
           <Button
