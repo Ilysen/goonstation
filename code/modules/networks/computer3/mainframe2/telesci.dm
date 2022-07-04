@@ -940,8 +940,43 @@ proc/is_teleportation_allowed(var/turf/T)
 				return
 
 		return
+	
+	ui_interact(mob/user, datum/tgui/ui)
+		ui = tgui_process.try_update_ui(src, user, ui)
+		if (!ui)
+			ui = new(user, src, "TelescienceConsole")
+			ui.open()
+	
+	ui_data(mob/user)
+		. = list(
+			"host_id" = host_id,
+			"coord_x" = xtarget,
+			"coord_y" = ytarget,
+			"coord_z" = ztarget
+		)
+	
+	ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
+		. = ..()
+		if (. || !host_id)
+			return
+		switch (action)
+			if ("send")
+				if (coord_update_flag)
+					coord_update_flag = FALSE
+					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
+				message_host("command=teleman&args=-p [padNum] send")
+			if ("receive")
+				if (coord_update_flag)
+					coord_update_flag = FALSE
+					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
+				message_host("command=teleman&args=-p [padNum] receive")
+			if ("toggle_portal")
+				if (coord_update_flag)
+					coord_update_flag = FALSE
+					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
+				message_host("command=teleman&args=-p [padNum] portal toggle")
 
-	attack_hand(var/mob/user)
+	/*attack_hand(var/mob/user)
 		if (..(user))
 			return
 
@@ -987,7 +1022,7 @@ proc/is_teleportation_allowed(var/turf/T)
 		src.add_dialog(user)
 		user.Browse(dat, "window=t_computer;size=400x600")
 		onclose(user, "t_computer")
-		return
+		return*/
 
 	attackby(obj/item/W, mob/user)
 		if (isscrewingtool(W))
