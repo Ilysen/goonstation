@@ -808,20 +808,27 @@ proc/is_teleportation_allowed(var/turf/T)
 	icon = 'icons/obj/computer.dmi'
 	icon_state = "s_teleport"
 	name = "teleport computer"
-	density = 1
-	anchored = 1
+	desc = "A control terminal for a nearby teleport pad. Handle with care."
+	density = TRUE
+	anchored = TRUE
 	device_tag = "SRV_TERMINAL"
 	timeout = 10
 	mats = 14
+
+	// Each of these vars is the current target for each coordinate, as entered in the terminal.
+	// xtarget handles the X coordinate, and so on.
 	var/xtarget = 0
 	var/ytarget = 0
 	var/ztarget = 0
 
-	var/list/bookmarks = new/list()
+	/// A list of all bookmark datums stored on this console.
+	var/list/datum/teleporter_bookmark/bookmarks = list()
+	/// The max number of bookmarks that this console can hold at once.
 	var/max_bookmarks = 5
-	var/allow_bookmarks = 1
-	var/allow_scan = 1
-	var/coord_update_flag = 1
+	/// If FALSE, bookmarks can't be used on this console at all.
+	var/allow_bookmarks = TRUE
+	/// If FALSE, this console can't scan its inputted coordinates. Makes telesci a lot riskier.
+	var/allow_scan = TRUE
 
 	var/readout = "Awaiting input..."
 	var/datum/computer/file/record/user_data
@@ -971,6 +978,8 @@ proc/is_teleportation_allowed(var/turf/T)
 		. = list(
 			"bookmarks" = bookmark_list,
 			"host_id" = host_id,
+			"can_scan" = allow_scan,
+			"can_bookmark" = allow_bookmarks,
 			"readout" = readout,
 			"coord_x" = xtarget,
 			"coord_y" = ytarget,
@@ -979,53 +988,95 @@ proc/is_teleportation_allowed(var/turf/T)
 	
 	ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
 		. = ..()
-		if (. || !host_id)
+		if (.)
 			return
+		// Reset the teleport computer's connection to the telepad.
+		// If "hard_reset" is defined in the params, the connection will be completely re-established.
+		// All other UI actions require a host ID to be present, so we check this first since it does not.
+		if (action == "reset_connection")
+			if ((src.host_id && !params["hard_reset"]) || !src.old_host_id || !src.link)
+				return
+
+			playsound(src.loc, "keyboard", 50, 1, -15)
+			if (params["hard_reset"])
+				src.host_id = null
+
+			var/ohi_cache = src.old_host_id
+			src.old_host_id = null
+
+			var/datum/signal/newsignal = get_free_signal()
+			newsignal.source = src
+			newsignal.transmission_method = TRANSMISSION_WIRE
+			newsignal.data["command"] = "term_connect"
+			newsignal.data["device"] = src.device_tag
+
+			newsignal.data_file = user_data.copy_file()
+
+			newsignal.data["address_1"] = ohi_cache
+			newsignal.data["sender"] = src.net_id
+
+			src.link.post_signal(src, newsignal)
+			SPAWN(1 SECOND)
+				if (!src.old_host_id)
+					src.old_host_id = ohi_cache
+				if (src.host_id)
+					boutput(usr, "<span class='notice'>Connection established.</span>")
+				else
+					boutput(usr, "<span class='alert'>Connection failed. Please try again, or contact your administrator.</span>")
+			return TRUE
+		
+		if (!src.host_id)
+			return
+
 		switch (action)
+			// Send from the telepad to the active coordinates
 			if ("send")
 				// Anything running the message_host() proc will cause a delay due to the wait after calling it
 				// We set the readout, play the sound, etc. immediately to avoid the UI feeling sluggish
 				// You'll see this repeated across the various options as a result of this
-				readout = "Sending..."
+				src.readout = "Sending..."
 				playsound(src.loc, 'sound/machines/keypress.ogg', 50, TRUE, -15)
 				tgui_process.update_uis(src)
-				if (coord_update_flag)
-					coord_update_flag = FALSE
-					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
 				message_host("command=teleman&args=-p [padNum] send")
+
+			// Receive from the active coordinates
 			if ("receive")
-				readout = "Receiving..."
+				src.readout = "Receiving..."
 				playsound(src.loc, 'sound/machines/keypress.ogg', 50, TRUE, -15)
 				tgui_process.update_uis(src)
-				if (coord_update_flag)
-					coord_update_flag = FALSE
-					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
 				message_host("command=teleman&args=-p [padNum] receive")
+
+			// Turn the portal on or off
 			if ("toggle_portal")
-				readout = "Activating portal..."
+				src.readout = "Activating portal..."
 				playsound(src.loc, 'sound/machines/keypress.ogg', 50, TRUE, -15)
 				tgui_process.update_uis(src)
-				if (coord_update_flag)
-					coord_update_flag = FALSE
-					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
 				message_host("command=teleman&args=-p [padNum] portal toggle")
+
+			// Adjust a coordinate by a provided number
 			if ("adjust_coordinate")
 				src.set_coordinate(params["coordinate_key"], params["new_coordinate"])
 				playsound(src.loc, 'sound/machines/keypress.ogg', 50, TRUE, -15)
+
+			// Set a coordinate to an inputted number
 			if ("change_coordinate")
 				var/new_coordinate = input(usr, "Set the [params["coordinate_key"]] coordinate to what?", name, params["cur_coordinate"]) as null|num
 				if (isnull(new_coordinate))
 					return
 				src.set_coordinate(params["coordinate_key"], new_coordinate)
 				playsound(src.loc, "keyboard", 50, TRUE, -15)
+			
+			// Scan the current coordinates to deduce if they're valid
 			if ("scan")
-				readout = "Scanning..."
 				playsound(src.loc, 'sound/machines/keypress.ogg', 50, TRUE, -15)
-				tgui_process.update_uis(src)
-				if (coord_update_flag)
-					coord_update_flag = FALSE
-					message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
-				message_host("command=teleman&args=-p [padNum] scan")
+				if (!src.allow_scan)
+					src.readout = "Scanning is not available on this machine."
+				else
+					src.readout = "Scanning..."
+					tgui_process.update_uis(src)
+					message_host("command=teleman&args=-p [padNum] scan")
+			
+			// Create a new bookmark with the active coordinates.
 			if ("add_bookmark")
 				if (!allow_bookmarks)
 					boutput(usr, "<span class='alert'>Bookmark functionality is disabled on this machine.</span>")
@@ -1045,8 +1096,10 @@ proc/is_teleportation_allowed(var/turf/T)
 				B.y = ytarget
 				B.z = ztarget
 				bookmarks.Add(B)
-				readout = "Bookmark saved to cache."
+				src.readout = "Bookmark saved to cache."
 				playsound(src.loc, "keyboard", 50, 1, -15)
+			
+			// Load a bookmark's coordinates to the computer.
 			if ("restore_bookmark")
 				if (!allow_bookmarks)
 					boutput(usr, "<span class='alert'>Bookmark functionality is disabled on this machine.</span>")
@@ -1057,8 +1110,10 @@ proc/is_teleportation_allowed(var/turf/T)
 				xtarget = B.x
 				ytarget = B.y
 				ztarget = B.z
-				readout = "Bookmark restored."
+				src.readout = "Bookmark restored."
 				playsound(src.loc, "keyboard", 50, TRUE, -15)
+			
+			// Delete a bookmark with the provided ref.
 			if ("delete_bookmark")
 				if (!allow_bookmarks)
 					boutput(usr, "<span class='alert'>Bookmark functionality is disabled on this machine.</span>")
@@ -1067,9 +1122,9 @@ proc/is_teleportation_allowed(var/turf/T)
 				if (!istype(B))
 					return
 				bookmarks.Remove(B)
-				readout = "Bookmark at coordinates removed."
+				src.readout = "Bookmark at coordinates removed."
 				playsound(src.loc, "keyboard", 50, TRUE, -15)
-		coord_update_flag = TRUE
+		message_host("command=teleman&args=-p [padNum] coords x=[xtarget] y=[ytarget] z=[ztarget]")
 		. = TRUE
 
 

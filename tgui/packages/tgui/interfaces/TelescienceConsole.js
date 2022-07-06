@@ -1,5 +1,5 @@
 import { useBackend } from '../backend';
-import { Box, Button, Collapsible, LabeledList, Section, Slider } from '../components';
+import { Blink, Button, Icon, LabeledList, Modal, Section } from '../components';
 import { Window } from '../layouts';
 
 export const TelescienceConsole = (props, context) => {
@@ -8,6 +8,8 @@ export const TelescienceConsole = (props, context) => {
     bookmarks,
     host_id,
     readout,
+    can_scan,
+    can_bookmark,
     coord_x,
     coord_y,
     coord_z,
@@ -17,7 +19,21 @@ export const TelescienceConsole = (props, context) => {
       theme="ntos"
       width={350}
       height={450}>
-      <Window.Content scrollable>
+      <Window.Content>
+        {!host_id && (
+          <Modal textAlign="center"
+            width={25}
+            height={8}
+            fontSize={2}
+            fontFamily="Courier"
+            color="red">
+            <Blink interval={500} time={500}>
+              <Icon name="wifi" pr={1.5} />
+            </Blink>
+            NO CONNECTION
+            <Button onClick={() => act('reset_connection', { hard_reset: 1 })}>Retry</Button>
+          </Modal>
+        )}
         <Section title={"Coordinates"}>
           <LabeledList>
             <LabeledList.Item label="X">
@@ -104,38 +120,42 @@ export const TelescienceConsole = (props, context) => {
         <Section title="Output">
           {readout}
         </Section>
-        <Section title="Bookmarks"
-          buttons={(
-            <Button icon="plus"
-              onClick={() => act('add_bookmark')} />
-          )}
-        >
-          {!data.bookmarks.length && ("No active bookmarks.")}
-          {!!data.bookmarks.length && (
-            <LabeledList>
-              {data.bookmarks.map((currentBookmark) => (
-                <LabeledList.Item 
-                  label={currentBookmark.name} 
-                  key={currentBookmark.name}
-                  buttons={(
-                    <>
-                      <Button
-                        icon="upload"
-                        onClick={() => act('restore_bookmark', { ref: currentBookmark.ref })}>Restore
-                      </Button>
+        {!!data.can_bookmark && (
+          <Section title="Bookmarks"
+            scrollable
+            buttons={(
+              <Button icon="plus"
+                onClick={() => act('add_bookmark')} />
+            )}
+          >
+            {!data.bookmarks.length && ("No active bookmarks.")}
+            {!!data.bookmarks.length && (
+              <LabeledList>
+                {data.bookmarks.map((currentBookmark) => (
+                  <LabeledList.Item 
+                    label={currentBookmark.name} 
+                    key={currentBookmark.name}
+                    buttons={(
+                      <>
+                        <Button
+                          icon="upload"
+                          onClick={() => act('restore_bookmark', { ref: currentBookmark.ref })}>Restore
+                        </Button>
                   
-                      <Button 
-                        icon="trash-alt"
-                        onClick={() => act('delete_bookmark', { ref: currentBookmark.ref })}>Delete
-                      </Button>  
-                    </>
-                  )}
-                >
-                  <Box>({currentBookmark.x}, {currentBookmark.y}, {currentBookmark.z})</Box>
-                </LabeledList.Item>
-              ))}
-            </LabeledList>)}
-        </Section>
+                        <Button 
+                          icon="trash-alt"
+                          onClick={() => act('delete_bookmark', { ref: currentBookmark.ref })}>Delete
+                        </Button>  
+                      </>
+                    )}
+                  >
+                    ({currentBookmark.x}, {currentBookmark.y}, {currentBookmark.z})
+                  </LabeledList.Item>
+                ))}
+              </LabeledList>)}
+          </Section>
+        )}
+        <Button onClick={() => act('reset_connection', { hard_reset: 0 })}>Reset Connection</Button>
       </Window.Content>
     </Window>
   );
