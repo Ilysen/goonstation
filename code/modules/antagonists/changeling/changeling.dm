@@ -24,6 +24,8 @@
 		src.absorbed_dna = list("[H.name]" = original)
 		src.ability_holder.addAbility(/datum/targetable/changeling/absorb)
 		src.ability_holder.addAbility(/datum/targetable/changeling/transform)
+		src.ability_holder.addAbility(/datum/targetable/changeling/monkey)
+		src.ability_holder.addAbility(/datum/targetable/changeling/mimic_voice)
 
 	remove_equipment()
 		var/mob/living/carbon/human/H = owner.current
@@ -48,3 +50,14 @@
 			if (absorbed_identities)
 				dat.Insert(3, "<b>Absorbed identities:</b> [english_list(absorbed_identities)]")
 		return dat
+
+	proc/get_dna(mob/living/carbon/human/victim)
+		return src.absorbed_dna[victim.real_name]
+
+	proc/add_dna(mob/living/carbon/human/victim, silent = FALSE)
+		if (!src.get_dna(victim))
+			var/datum/bioHolder/BH = new /datum/bioHolder(victim)
+			BH.CopyOther(victim.bioHolder)
+			src.absorbed_dna[victim.real_name] = BH
+			if (!silent)
+				boutput(src.owner.current, "<span class='notice'>We can now transform into [victim.real_name].</span>")

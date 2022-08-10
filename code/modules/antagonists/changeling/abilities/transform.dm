@@ -1,75 +1,9 @@
-/datum/targetable/changeling/monkey
-	name = "Lesser Form"
-	desc = "Become something much less powerful."
-	icon_state = "lesser"
-	cooldown = 50
-	targeted = 0
-	target_anything = 0
-	can_use_in_container = 1
-	var/last_used_name = null
-
-	onAttach(var/datum/abilityHolder/H)
-		..()
-		if (H?.owner) //Wire note: Fix for Cannot read null.real_name
-			last_used_name = H.owner.real_name
-
-	cast(atom/target)
-		if (..())
-			return 1
-
-		var/mob/living/carbon/human/H = holder.owner
-		if(!istype(H))
-			return 1
-		if (H.mutantrace)
-			if (ismonkey(H))
-				if (tgui_alert(H,"Are we sure?","Exit this lesser form?",list("Yes","No")) != "Yes")
-					return 1
-				doCooldown()
-
-				H.transforming = 1
-				H.canmove = 0
-				H.icon = null
-				APPLY_ATOM_PROPERTY(H, PROP_MOB_INVISIBILITY, "transform", INVIS_ALWAYS)
-				var/atom/movable/overlay/animation = new /atom/movable/overlay( usr.loc )
-				animation.icon_state = "blank"
-				animation.icon = 'icons/mob/mob.dmi'
-				animation.master = src
-				flick("monkey2h", animation)
-				sleep(4.8 SECONDS)
-				qdel(animation)
-				qdel(H.mutantrace)
-				H.set_mutantrace(null)
-				H.transforming = 0
-				H.canmove = 1
-				H.icon = initial(H.icon)
-				REMOVE_ATOM_PROPERTY(H, PROP_MOB_INVISIBILITY, "transform")
-				H.update_face()
-				H.update_body()
-				H.update_clothing()
-				H.real_name = last_used_name
-				H.abilityHolder.updateButtons()
-				logTheThing("combat", H, null, "leaves lesser form as a changeling, [log_loc(H)].")
-				return 0
-			else if (isabomination(H))
-				boutput(H, "We cannot transform in this form.")
-				return 1
-			else
-				boutput(H, "We cannot transform in this form.")
-				return 1
-		else
-			if (tgui_alert(H,"Are we sure?","Assume lesser form?",list("Yes","No")) != "Yes")
-				return 1
-			last_used_name = H.real_name
-			if (H.hasStatus("handcuffed"))
-				H.handcuffs.drop_handcuffs(H)
-			H.monkeyize()
-			H.abilityHolder.updateButtons()
-			logTheThing("combat", H, null, "enters lesser form as a changeling, [log_loc(H)].")
-			return 0
-
+/// Mimic the appearance of a human that the changeling has sampled.
 /datum/targetable/changeling/transform
 	name = "Transform"
-	desc = "Become someone else!"
+	desc = "Take on the appearance of a human we have absorbed or sampled.<br><br>\
+	Transformation is instant, but obvious to everyone nearby. Our appearance will perfectly match the individual, including appearance, voice, \
+	fingerprints, and DNA. Clothing and other equipment will not be replicated."
 	icon_state = "transform"
 	cooldown = 0
 	targeted = FALSE

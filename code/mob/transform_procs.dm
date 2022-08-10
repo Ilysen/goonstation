@@ -67,10 +67,10 @@
 
 		return respawned
 
-/mob/living/carbon/human/proc/monkeyize()
+/mob/living/carbon/human/proc/monkeyize(force = FALSE)
 	if (src.transforming || !src.bioHolder)
 		return
-	if (iswizard(src))
+	if (iswizard(src) && !force)
 		src.visible_message("<span class='alert'><b>[src] magically resists being transformed!</b></span>")
 		return
 

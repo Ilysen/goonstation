@@ -12,5 +12,6 @@
 		..()
 		. = list()
 		if (src.changeling_datum)
+			var/dna_len = length(changeling_datum.absorbed_dna)
 			.["DNA:"] = round(src.points)
-			.["Total:"] = length(changeling_datum.absorbed_dna)
+			.["Total:"] = !isnull(dna_len) ? dna_len : 0

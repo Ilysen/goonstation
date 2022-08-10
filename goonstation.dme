@@ -732,6 +732,7 @@ var/datum/preMapLoad/preMapLoad = new
 #include "code\modules\antagonists\changeling\abilities\absorb.dm"
 #include "code\modules\antagonists\changeling\abilities\changeling.dm"
 #include "code\modules\antagonists\changeling\abilities\hivemind.dm"
+#include "code\modules\antagonists\changeling\abilities\lesser_form.dm"
 #include "code\modules\antagonists\changeling\abilities\mimic_voice.dm"
 #include "code\modules\antagonists\changeling\abilities\morph_arm.dm"
 #include "code\modules\antagonists\changeling\abilities\regeneration.dm"

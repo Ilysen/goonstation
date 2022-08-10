@@ -136,12 +136,12 @@
 		if (complete > 0.6 && last_complete <= 0.6)
 			ownerMob.tri_message(target,
 				"<span class='alert'><b>[ownerMob] stabs [target] with the proboscis!</b></span>",
-				"<span class='notice'>We stab [target] with the proboscis and begin draining their fluids.</span>",
+				"<span class='notice'>We stab [target] with the proboscis and begin draining [his_or_her(target)] fluids.</span>",
 				"<span class='alert'><b>[ownerMob] stabs you with the proboscis and begins draining your fluids! [pick("FUCK", "OH JESUS", "AAAH", "HOLY FUCK", "OW OW OW")]!!")
 			random_brute_damage(target, 40)
 
 		if (complete > 0.6)
-			target.blood_volume = max(0, target.blood_volume - 20)
+			target.blood_volume = max(0, target.blood_volume - 30)
 			target.make_jittery(100)
 			if (ishuman(target))
 				var/mob/living/carbon/human/H = target
@@ -162,10 +162,11 @@
 			return
 
 		if (isliving(target))
-			var/mob/living/L
+			var/mob/living/L = target
 			L.was_harmed(owner, special = "ling")
 
 		devour.add_dna_data(target)
+		boutput(src.owner, "<span class='notice'>We must hold still...</span>")
 
 	onEnd()
 		..()
@@ -193,7 +194,7 @@
 
 /datum/targetable/changeling/absorb
 	name = "Absorb DNA"
-	desc = "Suck the DNA out of a human or changeling and incorporate it into our genetic structure. We need to be grabbing a target by the neck for this to work; the process is extremely obvious will take some time."
+	desc = "Suck the DNA out of a human or changeling and incorporate it into our genetic structure.<br><br>We need to be grabbing a target by the neck for this to work (with an empty hand, not an item) and the process will take some time."
 	icon_state = "absorb"
 	human_only = TRUE
 	cooldown = 0
@@ -204,36 +205,33 @@
 	cast(atom/target)
 		if (..())
 			return TRUE
-		var/mob/living/C = holder.owner
-
 		var/obj/item/grab/G = src.grab_check(null, 3, 1)
 		if (!G || !istype(G))
 			return TRUE
 		var/mob/living/carbon/human/T = G.affecting
-
 		if (!istype(T))
-			boutput(C, "<span class='alert'>This creature is not compatible with our biology.</span>")
+			boutput(src.holder.owner, "<span class='alert'>This creature is not compatible with our biology.</span>")
 			return TRUE
 		if (isnpcmonkey(T))
-			boutput(C, "<span class='alert'>Our hunger will not be satisfied by this lesser being.</span>")
+			boutput(src.holder.owner, "<span class='alert'>Our hunger will not be satisfied by this lesser being.</span>")
 			return TRUE
 		if (isnpc(T))
-			var/datum/antagonist/changeling/C = src.get_changeling()
-			boutput(C, "<span class='alert'>Our hunger will not be satisfied by this lesser being[!C?.absorbed_dna[T.real_name] ? ", but we sample its genome for later use" : ""].</span>")
-			add_dna_data(T)
+			boutput(src.holder.owner, "<span class='alert'>Our hunger will not be satisfied by this lesser being[!src.get_dna_data(T) ? ", but we sample its genome for later use" : ""].</span>")
+			src.add_dna_data(T)
 			return TRUE
 		if (T.bioHolder.HasEffect("husk"))
-			boutput(usr, "<span class='alert'>This creature has already been drained.</span>")
+			boutput(src.holder.owner, "<span class='alert'>This creature has already been drained.</span>")
 			return TRUE
 
-		actions.start(new/datum/action/bar/private/icon/changelingAbsorb(T, src), C)
+		actions.start(new/datum/action/bar/private/icon/changelingAbsorb(T, src), src.holder.owner)
 		return FALSE
 
-	proc/add_dna_data(var/mob/living/T)
+	/// Wrapper for changeling.add_dna().
+	proc/add_dna_data(mob/living/L)
 		var/datum/antagonist/changeling/C = src.get_changeling()
-		var/mob/living/owner_mob = src.holder.owner
-		if (!C?.absorbed_dna[T.real_name])
-			var/datum/bioHolder/BH = new /datum/bioHolder(T)
-			BH.CopyOther(T.bioHolder)
-			C.absorbed_dna[T.real_name] = BH
-			boutput(owner_mob, "<span class='notice'>We can now transform into [T.real_name].</span>")
+		C?.add_dna(L)
+
+	/// Wrapper for changeling.get_dna().
+	proc/get_dna_data(mob/living/L)
+		var/datum/antagonist/changeling/C = src.get_changeling()
+		return C?.get_dna(L)
