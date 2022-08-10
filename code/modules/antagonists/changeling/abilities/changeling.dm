@@ -381,3 +381,9 @@
 					.= 1
 				else if (abomination_only && isabomination(H))
 					.= 1
+
+	proc/get_changeling()
+		if (istype(src.holder, /datum/abilityHolder/changeling_new))
+			var/datum/abilityHolder/changeling_new/C = src.holder
+			return C.changeling_datum
+		return null

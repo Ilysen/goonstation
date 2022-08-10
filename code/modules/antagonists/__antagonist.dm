@@ -179,7 +179,9 @@ ABSTRACT_TYPE(/datum/antagonist)
 				obj_count++
 		if (src.check_success())
 			. += "<span class='success'><b>\The [src.display_name] has succeeded!</b></span>"
-			if (!isnull(success_medal) && log_data)
-				owner.current.unlock_medal(success_medal, TRUE)
+			if (log_data)
+				owner.current.unlock_medal("MISSION COMPLETE", TRUE)
+				if (!isnull(success_medal))
+					owner.current.unlock_medal(success_medal, TRUE)
 		else
 			. += "<span class='alert'><b>\The [src.display_name] has failed!</b></span>"
