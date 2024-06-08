@@ -142,6 +142,9 @@
 		if (.)
 			return
 		switch (action)
+			if ("who_are_you")
+				src.temp = src.whotext
+				. = TRUE
 			if ("do_haggle")
 				var/param = params["commodity_ref"]
 				if (!param)

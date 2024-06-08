@@ -1,8 +1,8 @@
-import { useBackend } from '../../backend';
-import { Window } from '../../layouts';
-import { Button, Flex, Image, Section, Stack } from '../../components';
-import { truncate } from '../../format';
-import { pluralize } from '../common/stringUtils';
+import { useBackend } from '../backend';
+import { Window } from '../layouts';
+import { Button, Flex, Image, Section, Stack } from '../components';
+import { truncate } from '../format';
+import { pluralize } from './common/stringUtils';
 
 const getPrice = (a) => (
   a.quantity === 0 ? "Out of Stock!"
@@ -115,8 +115,10 @@ export const Trader = (_props, context) => {
                     src={mugshot}
                   />
                 </Flex.Item>
-                <Flex.Item grow={1} mr={1} width="54%">
-                  <Section fill={1} title={trader_name}>
+                <Flex.Item grow mr={1} width="54%">
+                  <Section fill title={trader_name} buttons={
+                    <Button icon="info" content="Who are you?" onClick={() => act('who_are_you')} />
+                  }>
                     <Flex direction="column">
                       <Flex.Item mb={2}>
                         {dialogue || `${trader_name} stares blankly.`}
