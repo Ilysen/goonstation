@@ -65,6 +65,9 @@
 								"I'm being more than generous here, I think you'll agree.",
 								"This is my final offer. Can't do better than this.")
 
+	/// If TRUE, this trader will package their goods into a crate; otherwise, they'll spawn as loose items
+	var/include_crate = TRUE
+
 	New()
 		dialogue = new/datum/dialogueMaster/traderGeneric(src)
 		src.trader_area = get_area(src)
@@ -150,7 +153,7 @@
 						break
 				if (!istype(commodity_ref))
 					return
-				var/asking_price = tgui_input_number(usr, "Please enter your asking price.", "Haggle", commodity_ref.price)
+				var/asking_price = tgui_input_number(usr, "Please enter your asking price.", "Haggling with [src.name]", commodity_ref.price, INFINITY)
 				if (asking_price)
 					if (src.patience == commodity_ref.haggleattempts)
 						src.temp = "[src.name] becomes angry and won't trade anymore."
@@ -171,20 +174,59 @@
 						break
 				if (!istype(commodity_ref))
 					return
-				src.shopping_cart += new commodity_ref.comtype
-				src.temp = pick(successful_purchase_dialogue)
+				var/qty = params["quantity"]
+				var/max_qty = commodity_ref.amount == -1 ? INFINITY : commodity_ref.amount
+				if (!qty)
+					qty = tgui_input_number(usr, "Choose how many to purchase[max_qty != INFINITY ? "(max [commodity_ref.amount])" : ""].", "Purchasing [commodity_ref.comname]", 1, max_qty)
+					if (!qty)
+						return
+				if (!src.shopping_cart[commodity_ref])
+					src.shopping_cart[commodity_ref] = 0
+				src.shopping_cart[commodity_ref] = min(src.shopping_cart[commodity_ref] + qty, max_qty)
+				if (src.shopping_cart[commodity_ref] <= 0)
+					src.shopping_cart.Remove(commodity_ref)
+				if (qty > 0)
+					src.temp = pick(src.buy_dialogue)
+				. = TRUE
+			if ("toggle_crate")
+				include_crate = !include_crate
+				. = TRUE
+			if ("clear_cart")
+				src.shopping_cart.Cut()
+				. = TRUE
+			if ("remove_card")
+				src.scan = null
+				. = TRUE
+			if ("complete_trade")
+				src.complete_purchase()
+				src.temp = src.pickupdialogue
 				. = TRUE
 
 	ui_data(mob/user)
+		if (!user.client) // this is an extremely hacky fallback to prevent traders in the QM console from throwing runtimes
+			return
+		var/total_tally = 0
 		var/illegal = istraitor(user) || isspythief(user) || isnukeop(user) || user.mind?.get_antagonist(ROLE_SLEEPER_AGENT)
 		var/list/cart = list()
 		for (var/datum/commodity/C in src.shopping_cart)
-			cart += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+			total_tally += C.price * src.shopping_cart[C]
+			cart += list(list(
+				"name" = C.comname,
+				"desc" = C.desc,
+				"price" = C.price,
+				"baseprice" = C.baseprice,
+				"img" = getItemIcon(C.comtype, C = user.client),
+				"ref" = ref(C),
+				"quantity" = src.shopping_cart[C]
+				))
 		return list(
 			"shopping_cart" = cart,
-			"dialogue" = src.temp,
-			"scanned_card" = src.scan,
-			"illegal" = illegal
+			"dialogue" = src.temp ? src.temp : src.greeting,
+			"scanned_card" = src.scan?.name,
+			"card_credits" = 69420, //TEMP
+			"illegal" = illegal,
+			"total_tally" = total_tally,
+			"include_crate" = include_crate
 		)
 
 	ui_static_data(mob/user)
@@ -192,11 +234,11 @@
 		var/list/goods_bought = list()
 		var/list/goods_illegal = list()
 		for (var/datum/commodity/C in src.goods_sell)
-			goods_sold += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+			goods_sold += list(list("name" = C.comname, "desc" = C.desc, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
 		for (var/datum/commodity/C in src.goods_buy)
-			goods_bought += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+			goods_bought += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
 		for (var/datum/commodity/C in src.goods_illegal)
-			goods_illegal += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+			goods_illegal += list(list("name" = C.comname, "desc" = C.desc, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
 		var/icon/mugshot = resource("images/traders/[src.picture]")
 		return list(
 			"name" = src.name,
@@ -205,6 +247,43 @@
 			"goods_buy" = goods_bought,
 			"goods_illegal" = goods_illegal
 		)
+
+	proc/complete_purchase()
+		var/list/markers = new/list()
+		var/picked_location
+		var/found
+
+		var/list/area_turfs = get_area_turfs(trader_area)
+		if (!area_turfs || !length(area_turfs))
+			area_turfs = get_area_turfs(get_area(src))
+
+		for (var/turf/T in area_turfs)
+			for (var/obj/marker/supplymarker/D in T)
+				markers += D
+
+		for (var/C in markers)
+			if (locate(/obj/storage/crate) in get_turf(C))
+				continue
+			found = TRUE
+			found = get_turf(C)
+		if (!found)
+			if (islist(markers) && length(markers))
+				picked_location = get_turf(pick(markers))
+			else
+				picked_location = get_turf(src) // put it SOMEWHERE
+
+		var/obj/storage/crate/A = include_crate ? new /obj/storage/crate(picked_location) : null
+		A?.name = "Goods Crate ([src.name])"
+		showswirl(picked_location)
+		for (var/i in 1 to length(src.shopping_cart))
+			var/datum/commodity/C = src.shopping_cart[i]
+			for (var/q in 1 to src.shopping_cart[C])
+				if (C.amount != -1)
+					C.amount--
+				var/atom/movable/AM = new C.comtype (picked_location)
+				if (istype(A))
+					AM.set_loc(A)
+		src.shopping_cart.Cut()
 
 	Topic(href, href_list)
 		if(..())
@@ -280,6 +359,7 @@
 								P.amount -= quantity
 						if(log_trades)
 							logTheThing(LOG_STATION, usr, "bought ([quantity]) [P.comtype] from [src] at [log_loc(get_turf(src))]")
+						shopping_cart[P] = quantity
 						while(quantity-- > 0)
 							shopping_cart += new P.comtype()
 						src.temp = {"[pick(successful_purchase_dialogue)]<BR>
