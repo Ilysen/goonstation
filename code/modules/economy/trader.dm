@@ -9,6 +9,7 @@
 /obj/npc/trader
 	name="Trader"
 	layer = 4  //Same layer as most mobs, should stop them from sometimes being drawn under their shuttle chairs out of sight
+	flags = TGUI_INTERACTIVE
 	var/bullshit = 0
 	var/hiketolerance = 20 //How much they will tolerate price hike
 	var/list/droplist = null //What the merchant will drop upon their death
@@ -118,15 +119,6 @@
 				boutput(user, SPAN_ALERT("No bank account associated with this ID found."))
 				src.scan = null
 
-	attack_hand(var/mob/user)
-		if(..())
-			return
-		if(dialogue != null)
-			dialogue.showDialogue(user)
-		else
-			openTrade(user)
-		return
-
 	disposing()
 		goods_sell = null
 		goods_buy = null
@@ -135,6 +127,84 @@
 
 	proc/barter_lookup(mob/M)
 		. = M.real_name
+
+	ui_interact(mob/user, datum/tgui/ui)
+		ui = tgui_process.try_update_ui(user, src, ui)
+		if (!ui)
+			ui = new(user, src, "Trader")
+			ui.open()
+
+	ui_act(action, list/params, datum/tgui/ui, datum/ui_state/state)
+		. = ..()
+		if (.)
+			return
+		switch (action)
+			if ("do_haggle")
+				var/param = params["commodity_ref"]
+				if (!param)
+					return
+				var/datum/commodity/commodity_ref
+				for (var/datum/commodity/C in src.goods_buy + src.goods_illegal + src.goods_sell)
+					if (ref(C) == param)
+						commodity_ref = C
+						break
+				if (!istype(commodity_ref))
+					return
+				var/asking_price = tgui_input_number(usr, "Please enter your asking price.", "Haggle", commodity_ref.price)
+				if (asking_price)
+					if (src.patience == commodity_ref.haggleattempts)
+						src.temp = "[src.name] becomes angry and won't trade anymore."
+						src.angry = TRUE
+						src.anger()
+					else
+						src.haggle(asking_price, params["buying"], commodity_ref)
+						src.update_static_data(usr)
+				. = TRUE
+			if ("add_to_cart")
+				var/param = params["commodity_ref"]
+				if (!param)
+					return
+				var/datum/commodity/commodity_ref
+				for (var/datum/commodity/C in src.goods_buy + src.goods_illegal + src.goods_sell)
+					if (ref(C) == param)
+						commodity_ref = C
+						break
+				if (!istype(commodity_ref))
+					return
+				src.shopping_cart += new commodity_ref.comtype
+				src.temp = pick(successful_purchase_dialogue)
+				. = TRUE
+
+	ui_data(mob/user)
+		var/illegal = istraitor(user) || isspythief(user) || isnukeop(user) || user.mind?.get_antagonist(ROLE_SLEEPER_AGENT)
+		var/list/cart = list()
+		for (var/datum/commodity/C in src.shopping_cart)
+			cart += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+		return list(
+			"shopping_cart" = cart,
+			"dialogue" = src.temp,
+			"scanned_card" = src.scan,
+			"illegal" = illegal
+		)
+
+	ui_static_data(mob/user)
+		var/list/goods_sold = list()
+		var/list/goods_bought = list()
+		var/list/goods_illegal = list()
+		for (var/datum/commodity/C in src.goods_sell)
+			goods_sold += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+		for (var/datum/commodity/C in src.goods_buy)
+			goods_bought += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+		for (var/datum/commodity/C in src.goods_illegal)
+			goods_illegal += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype), "ref" = ref(C)))
+		var/icon/mugshot = resource("images/traders/[src.picture]")
+		return list(
+			"name" = src.name,
+			"mugshot" = mugshot,
+			"goods_sell" = goods_sold,
+			"goods_buy" = goods_bought,
+			"goods_illegal" = goods_illegal
+		)
 
 	Topic(href, href_list)
 		if(..())
