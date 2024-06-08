@@ -7,25 +7,40 @@
 
 
 /obj/npc/trader
-	name="Trader"
-	layer = 4  //Same layer as most mobs, should stop them from sometimes being drawn under their shuttle chairs out of sight
+	name = "Trader"
+	layer = MOB_LAYER
 	flags = TGUI_INTERACTIVE
-	var/bullshit = 0
-	var/hiketolerance = 20 //How much they will tolerate price hike
-	var/list/droplist = null //What the merchant will drop upon their death
-	var/list/goods_sell = new/list() //What products the trader sells
-	var/illegal = 0 // maybe trading with illegal bots could flag the user's criminal record for smuggling
-	var/goods_illegal = list() // Illegal goods
-	var/list/goods_buy = new/list() //what products the merchant buys
-	var/list/shopping_cart = new/list() //What has been bought
-	var/list/mob/barter_customers = list() // Customer credit
-	var/obj/item/sell = null //Item to sell
-	var/portrait_setup = null
-	var/obj/item/sellitem = null
-	var/item_name = "--------"
-	var/obj/item/card/id/scan = null
+
+	/// How much a trader will tolerate haggling, in percent.
+	/// Haggling attempts whose target price is less than (100 - hike_tolerance)% of the original price will fail.
+	var/hike_tolerance = 20
+	/// The scanned ID card. Purchases will be made using credits from a linked bank account.
+	var/obj/item/card/id/scan
+	/// If TRUE, this trader will package their goods into a crate; otherwise, they'll spawn as loose items.
+	var/include_crate = TRUE
+	/// If trades from this trader will be saved to the round log.
+	var/log_trades = TRUE
+
+	/// A list of commodities that the trader sells.
+	var/list/goods_sell = list()
+	/// A list of commodities that this trader can buy from players.
+	var/list/goods_buy = list()
+	/// Commodities in this list are bought like other goods, but are only visible to Syndicate-affiliated antagonists.
+	var/list/goods_illegal = list()
+
+	/// Contains information about what will be bought if the trade is confirmed.
+	/// This functions as an associative list, with commodity instances associated to the quantity being bought.
+	var/list/shopping_cart = list()
+
+	/// Bartering traders don't use regular money and instead use a fixed per-mob point system (see `barter_customers`), making them a closed system.
 	var/barter = FALSE
-	var/currency = "Credits"
+	/// An associative list that tracks the barter credit of every mob that has any for this trader. Does nothing if `barter` is false.
+	var/list/mob/barter_customers = list()
+	/// The longform currency name used in the UI.
+	var/currency_name = "Credits"
+	/// A short symbol used in the UI. If present, this will be used instead of `currency_name` where applicable.
+	var/currency_symbol = "⪽"
+
 	//Trader dialogue
 	var/sell_dialogue = null
 	var/buy_dialogue = null
@@ -37,7 +52,6 @@
 	var/pickupdialoguefailure = null
 	var/list/trader_area = null
 	var/doing_a_thing = 0
-	var/log_trades = TRUE
 
 	var/datum/dialogueMaster/dialogue = null //dialogue will open on click if available. otherwise open trade directly.
 	var/lastWindowName = ""
@@ -64,9 +78,6 @@
 								"You're busting my balls here. How's this?",
 								"I'm being more than generous here, I think you'll agree.",
 								"This is my final offer. Can't do better than this.")
-
-	/// If TRUE, this trader will package their goods into a crate; otherwise, they'll spawn as loose items
-	var/include_crate = TRUE
 
 	New()
 		dialogue = new/datum/dialogueMaster/traderGeneric(src)
@@ -246,9 +257,11 @@
 		return list(
 			"name" = src.name,
 			"mugshot" = mugshot,
-			"goods_sell" = goods_sold,
-			"goods_buy" = goods_bought,
-			"goods_illegal" = goods_illegal
+			"goods_sell" = src.goods_sold,
+			"goods_buy" = src.goods_bought,
+			"goods_illegal" = src.goods_illegal,
+			"currency_name" = src.currency_name,
+			"currency_symbol" = src.currency_symbol
 		)
 
 	proc/complete_purchase()
@@ -307,7 +320,7 @@
 			for(var/datum/commodity/N in goods_for_purchase)
 				// Have to send the type instead of a reference to the obj because it would get caught by the garbage collector. oh well.
 				src.temp += {"<A href='?src=\ref[src];doorder=\ref[N]'><B><U>[N.comname]</U></B></A><BR>
-				<B>Cost:</B> [N.price] [currency]<BR>
+				<B>Cost:</B> [N.price] [currency_name]<BR>
 				<B>Description:</B> [N.desc] Amount: [N.amount > -1 ? N.amount : "Infinite"]<BR>
 				<A href='?src=\ref[src];haggleb=\ref[N]'><B><U>Haggle</U></B></A><BR><BR>"}
 			src.temp += "<BR><A href='?src=\ref[src];mainmenu=1'>Ok</A>"
@@ -408,7 +421,7 @@
 				if(N.hidden)
 					continue
 				else
-					temp+={"<B>[N.comname] for [N.price] [currency]:</B> [N.indemand ? N.desc_buy_demand : N.desc_buy]<BR>
+					temp+={"<B>[N.comname] for [N.price] [currency_name]:</B> [N.indemand ? N.desc_buy_demand : N.desc_buy]<BR>
 							<A href='?src=\ref[src];haggles=[N]'><B><U>Haggle</U></B></A><BR><BR>"}
 			if(src.sellitem)
 				src.item_name = src.sellitem.name
@@ -462,7 +475,7 @@
 				if(N.hidden)
 					continue
 				else
-					temp+="<B>[N.comname] for [N.price] [currency]:</B> [N.indemand ? N.desc_buy_demand : N.desc_buy]<BR><BR>"
+					temp+="<B>[N.comname] for [N.price] [currency_name]:</B> [N.indemand ? N.desc_buy_demand : N.desc_buy]<BR><BR>"
 			if(src.sellitem)
 				src.item_name = src.sellitem.name
 			else
@@ -581,14 +594,14 @@
 		if(barter)
 			if(!barter_customers[barter_lookup(user)])
 				barter_customers[barter_lookup(user)] = 0
-			dat+="<B>Barter value</B>: [barter_customers[barter_lookup(user)]] [currency]<HR>"
+			dat+="<B>Barter value</B>: [barter_customers[barter_lookup(user)]] [currency_name]<HR>"
 		else
 			dat +="<B>Scanned Card:</B> <A href='?src=\ref[src];card=1'>([src.scan])</A><BR>"
 			if(scan)
 				var/datum/db_record/account = null
 				account = FindBankAccountByName(src.scan.registered)
 				if (account)
-					dat+="<B>Current Funds</B>: [account["current_money"]] [currency]<HR>"
+					dat+="<B>Current Funds</B>: [account["current_money"]] [currency_name]<HR>"
 				else
 					dat+="<HR>"
 		if(temp)
@@ -656,25 +669,25 @@
 			if(askingprice < H.price)
 				if (src.bullshit >= 5)
 					H.price = askingprice
-					src.temp = "<B>Cost:</B> [H.price] [currency]<BR>"
+					src.temp = "<B>Cost:</B> [H.price] [currency_name]<BR>"
 					src.temp += src.errormsgs[3]
 					return
 				else
-					src.temp = "<B>Cost:</B> [H.price] [currency]<BR>"
+					src.temp = "<B>Cost:</B> [H.price] [currency_name]<BR>"
 					src.temp += src.errormsgs[4]
 					return
 		// check if the price increase % of the haggle is more than this trader will tolerate
 		var/hikeperc = askingprice - H.price
 		hikeperc = (hikeperc / H.price) * 100
-		var/negatol = 0 - src.hiketolerance
+		var/negatol = 0 - src.hike_tolerance
 		if (buying == 1) // we're buying, so price must be checked for negative
 			if (hikeperc <= negatol || askingprice < H.baseprice / 5)
-				src.temp = "<B>Cost:</B> [H.price] [currency]<BR>"
+				src.temp = "<B>Cost:</B> [H.price] [currency_name]<BR>"
 				src.temp += src.errormsgs[5]
 				H.haggleattempts++
 				return
 		else
-			if (hikeperc >= src.hiketolerance || askingprice > H.baseprice * 5) // we're selling, so check hike for positive
+			if (hikeperc >= src.hike_tolerance || askingprice > H.baseprice * 5) // we're selling, so check hike for positive
 				src.temp = src.errormsgs[5]
 				H.haggleattempts++
 				return
@@ -689,7 +702,7 @@
 			else
 				H.price = round(middleground - rand(0,negotiate))
 
-		src.temp = "<B>New Cost:</B> [H.price] [currency]<BR><HR>"
+		src.temp = "<B>New Cost:</B> [H.price] [currency_name]<BR><HR>"
 		H.haggleattempts++
 		// warn the player if the trader isn't going to take any more haggling
 		if (patience == H.haggleattempts)
@@ -755,7 +768,7 @@
 				if(log_trades && length(sold_string))
 					logTheThing(LOG_STATION, user, "sold ([json_encode(sold_string)]) to [src] for [cratevalue] at [log_loc(get_turf(src))]")
 				if(cratevalue)
-					boutput(user, SPAN_NOTICE("[src] takes what they want from [O]. [cratevalue] [currency] have been transferred to your account."))
+					boutput(user, SPAN_NOTICE("[src] takes what they want from [O]. [cratevalue] [currency_name] have been transferred to your account."))
 					if(account)
 						account["current_money"] += cratevalue
 					else
@@ -837,8 +850,8 @@
 
 		pickupdialoguefailure = "You need to BUY things before you pick them up!"
 
-		src.hiketolerance = rand(2,4)
-		src.hiketolerance *= 10
+		src.hike_tolerance = rand(2,4)
+		src.hike_tolerance *= 10
 
 		var/items_for_sale = rand(5,8)
 		var/items_wanted = rand(2,5)

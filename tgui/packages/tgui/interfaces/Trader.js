@@ -4,12 +4,12 @@ import { Button, Flex, Image, Section, Stack } from '../components';
 import { truncate } from '../format';
 import { pluralize } from './common/stringUtils';
 
-const getPrice = (a) => (
+const getPrice = (a, currency_symbol) => (
   a.quantity === 0 ? "Out of Stock!"
-    : (((a.price)) ? `${a.price}⪽` : "Free")
+    : (((a.price)) ? `${a.price}${currency_symbol}` : "Free")
 );
 
-const mapGoodsFromList = (act, scanned_card, goods, is_buying = true) => (
+const mapGoodsFromList = (act, goods, is_buying = true) => (
   goods && goods.length ? goods.map(commodity => {
     return (
       <Flex key={commodity.name} justify="space-between" align="stretch">
@@ -51,7 +51,7 @@ const mapGoodsFromList = (act, scanned_card, goods, is_buying = true) => (
   )
 );
 
-const mapShoppingCart = (act, scanned_card, goods) => (
+const mapShoppingCart = (act, goods) => (
   goods && goods.length ? goods.map(commodity => {
     return (
       <Flex key={commodity.name} justify="space-between" align="stretch">
@@ -95,6 +95,8 @@ export const Trader = (_props, context) => {
   const goods_sell = data.goods_sell || [];
   const goods_buy = data.goods_buy || [];
   const goods_illegal = data.goods_illegal || [];
+  const currency_name = data.currency_name || [];
+  const currency_symbol = data.currency_symbol || [];
 
   return (
     <Window
@@ -133,7 +135,7 @@ export const Trader = (_props, context) => {
                         />
                       </Flex.Item>
                       <Flex.Item>
-                        <b>Available Credits: </b>{card_credits}⪽
+                        <b>Available {currency_name}: </b>{card_credits}{currency_symbol}
                       </Flex.Item>
                     </Flex>
                   </Section>
@@ -157,7 +159,8 @@ export const Trader = (_props, context) => {
                         />
                       </Flex.Item>
                       <Flex.Item mt={2} align="center">
-                        {total_tally >= 0 ? <><b>Cost:</b> {total_tally}⪽</> : <><b>Profit:</b> {-total_tally}⪽</> }
+                        {total_tally >= 0 ? <><b>Cost:</b> {total_tally}{currency_symbol}</>
+                          : <><b>Profit:</b> {-total_tally}{currency_symbol}</> }
                       </Flex.Item>
                     </Flex>
                   </Section>
@@ -170,16 +173,16 @@ export const Trader = (_props, context) => {
                 direction="row">
                 <Flex.Item mr={1} grow={1}>
                   <Section title="Selling">
-                    {mapGoodsFromList(act, scanned_card, goods_sell)}
+                    {mapGoodsFromList(act, goods_sell)}
                   </Section>
                   <Section title="Buying">
-                    {mapGoodsFromList(act, scanned_card, goods_buy, false)}
+                    {mapGoodsFromList(act, goods_buy, false)}
                   </Section>
                   {!goods_illegal.length || !illegal ? null : (
                     <Section title="Illegal Goods" buttons={
                       <Button icon="info" tooltip="These items are only listed here because you're an antagonist. Non-antagonists can't see them!" />
                     }>
-                      {mapGoodsFromList(act, scanned_card, goods_illegal)}
+                      {mapGoodsFromList(act, goods_illegal)}
                     </Section>)}
                 </Flex.Item>
                 <Flex.Item mr={1} grow={1}>
@@ -189,7 +192,7 @@ export const Trader = (_props, context) => {
                     </Button>
                   }>
                     <Section title="Buying">
-                      {mapShoppingCart(act, scanned_card, shopping_cart)}
+                      {mapShoppingCart(act, shopping_cart)}
                     </Section>
                     <Section title="Selling">
                       <i>You aren&apos;t selling anything in this trade.</i>
