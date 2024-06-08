@@ -9,7 +9,7 @@ const getPrice = (a, currency_symbol) => (
     : (((a.price)) ? `${a.price}${currency_symbol}` : "Free")
 );
 
-const mapGoodsFromList = (act, goods, is_buying = true) => (
+const mapGoodsFromList = (act, currency_symbol, goods, is_buying = true) => (
   goods && goods.length ? goods.map(commodity => {
     return (
       <Flex key={commodity.name} justify="space-between" align="stretch">
@@ -28,7 +28,7 @@ const mapGoodsFromList = (act, goods, is_buying = true) => (
         <Flex.Item>
           <Button
             tooltip="Haggle..."
-            content={getPrice(commodity)}
+            content={getPrice(commodity, currency_symbol)}
             onClick={() => act('do_haggle', { commodity_ref: commodity.ref, buying: is_buying })}
           />
           {!is_buying ? null : (
@@ -87,9 +87,42 @@ const mapShoppingCart = (act, goods) => (
   )
 );
 
+const mapSellingCart = (act, goods) => (
+  goods && goods.length ? goods.map(commodity => {
+    return (
+      <Flex key={commodity.name} justify="space-between" align="stretch">
+        <Flex.Item>
+          <Button
+            icon="info"
+          />
+          <Image
+            height="32px"
+            verticalAlign="middle"
+            src={commodity.img}
+          />
+          {commodity.quantity}x {truncate(pluralize(commodity.name, commodity.quantity), 30)}
+        </Flex.Item>
+        <Flex.Item>
+          <Button
+            icon="minus"
+            onClick={() => act('remove_from_sell', { commodity_ref: commodity.ref, quantity: -1 })}
+          />
+          <Button
+            icon="x"
+            content="Remove All"
+            onClick={() => act('remove_from_sell', { commodity_ref: commodity.ref, quantity: -commodity.quantity })}
+          />
+        </Flex.Item>
+      </Flex>);
+  }) : (
+    <i>You aren&apos;t selling anything this trade.</i>
+  )
+);
+
 export const Trader = (_props, context) => {
   const { act, data } = useBackend(context);
-  const { dialogue, shopping_cart, scanned_card, card_credits, illegal, total_tally, include_crate } = data;
+  const { shopping_cart, selling_cart, dialogue, scanned_card, card_credits, illegal, total_tally,
+    include_crate } = data;
   const trader_name = data.name || "Trader";
   const mugshot = data.mugshot || [];
   const goods_sell = data.goods_sell || [];
@@ -150,7 +183,7 @@ export const Trader = (_props, context) => {
                           content="Include Crate?"
                           onClick={() => act('toggle_crate')} />
                         <Button.Confirm
-                          disabled={!shopping_cart.length}
+                          disabled={!shopping_cart.length && !selling_cart.length}
                           textAlign="center"
                           width="100%"
                           icon="cash-register"
@@ -173,29 +206,35 @@ export const Trader = (_props, context) => {
                 direction="row">
                 <Flex.Item mr={1} grow={1}>
                   <Section title="Selling">
-                    {mapGoodsFromList(act, goods_sell)}
+                    {mapGoodsFromList(act, currency_symbol, goods_sell)}
                   </Section>
-                  <Section title="Buying">
-                    {mapGoodsFromList(act, goods_buy, false)}
+                  <Section title="Buying" buttons={
+                    <Button icon="info" tooltip="You can sell items in bulk by click-dragging a crate onto the trader." />
+                  }>
+                    {mapGoodsFromList(act, currency_symbol, goods_buy, false)}
                   </Section>
                   {!goods_illegal.length || !illegal ? null : (
                     <Section title="Illegal Goods" buttons={
                       <Button icon="info" tooltip="These items are only listed here because you're an antagonist. Non-antagonists can't see them!" />
                     }>
-                      {mapGoodsFromList(act, goods_illegal)}
+                      {mapGoodsFromList(act, currency_symbol, goods_illegal)}
                     </Section>)}
                 </Flex.Item>
                 <Flex.Item mr={1} grow={1}>
                   <Section title="Cart" buttons={
-                    <Button icon="trash" disabled={!shopping_cart.length} onClick={() => act('clear_cart')}>
+                    <Button icon="trash" disabled={!shopping_cart.length} onClick={() => act('clear_shopping_cart')}>
                       Clear
                     </Button>
                   }>
                     <Section title="Buying">
                       {mapShoppingCart(act, shopping_cart)}
                     </Section>
-                    <Section title="Selling">
-                      <i>You aren&apos;t selling anything in this trade.</i>
+                    <Section title="Selling"buttons={
+                      <Button icon="trash" disabled={!selling_cart.length} onClick={() => act('clear_selling_cart')}>
+                        Clear
+                      </Button>
+                    }>
+                      {mapSellingCart(act, selling_cart)}
                     </Section>
                   </Section>
                 </Flex.Item>

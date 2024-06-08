@@ -195,8 +195,6 @@ TYPEINFO(/turf/simulated/floor/shuttlebay/flock)
 
 	greeting= {"[src.name] clicks from your headset. \"[gradientText(grad_col_1, grad_col_2, "Greetings, spacefarer. There are many permutations of the Signal, and we are an iteration less inclined to senseless destruction. Do you wish to engage in trade?")]\""}
 
-	portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 	sell_dialogue = {"[src.name] makes a short burst of pink noise. \"[gradientText(grad_col_1, grad_col_2, "We always seek raw materials for repairs and maintenance. We value some materials more than others, though.")]\""}
 
 	buy_dialogue = {"[src.name] whirrs and rattles. \"[gradientText(grad_col_1, grad_col_2, "Our technology is rare in this region of space. We must warn you that some items may be beyond your capacity to operate. You lack the knowledge and frequencies required. We are prohibited from providing them.")]\""}

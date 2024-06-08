@@ -473,7 +473,8 @@ var/datum/magpie_manager/magpie_man = new
 	angrynope = "Unable to process request."
 	whotext = "I am the salvage reclamation and supply commissary.  In short I will provide goods in exchange for reclaimed materials and equipment."
 	barter = TRUE
-	currency = "Salvage Points"
+	currency_name = "Salvage Points"
+	currency_symbol = null
 
 	New()
 		..()

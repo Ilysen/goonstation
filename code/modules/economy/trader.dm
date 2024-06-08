@@ -31,6 +31,9 @@
 	/// Contains information about what will be bought if the trade is confirmed.
 	/// This functions as an associative list, with commodity instances associated to the quantity being bought.
 	var/list/shopping_cart = list()
+	/// A list of items queued to be sold if the trade is confirmed.
+	/// For simplicity's sake, these are stored inside the trader themselves.
+	var/list/selling_cart = list()
 
 	/// Bartering traders don't use regular money and instead use a fixed per-mob point system (see `barter_customers`), making them a closed system.
 	var/barter = FALSE
@@ -132,6 +135,15 @@
 			else
 				boutput(user, SPAN_ALERT("No bank account associated with this ID found."))
 				src.scan = null
+		var/datum/commodity/C = src.get_commodity_for_object(I)
+		if (C in src.goods_buy)
+			boutput(user, SPAN_NOTICE("You add \the [I] to your shopping cart with \the [src]."))
+			user.drop_item(I)
+			I.set_loc(src)
+			if (!islist(src.selling_cart[C]))
+				src.selling_cart[C] = list()
+			var/list/L = src.selling_cart[C]
+			L.Add(I)
 
 	disposing()
 		goods_sell = null
@@ -182,7 +194,7 @@
 				if (!param)
 					return
 				var/datum/commodity/commodity_ref
-				for (var/datum/commodity/C in src.goods_buy + src.goods_illegal + src.goods_sell)
+				for (var/datum/commodity/C in src.goods_illegal + src.goods_sell)
 					if (ref(C) == param)
 						commodity_ref = C
 						break
@@ -202,11 +214,39 @@
 				if (qty > 0)
 					src.temp = pick(src.buy_dialogue)
 				. = TRUE
+			if ("remove_from_sell")
+				var/param = params["commodity_ref"]
+				if (!param)
+					return
+				var/datum/commodity/commodity_ref
+				for (var/datum/commodity/C in src.goods_buy)
+					if (ref(C) == param)
+						commodity_ref = C
+						break
+				if (!istype(commodity_ref))
+					return
+				var/qty = isnum(params["quantity"]) ? params["quantity"] : 1
+				var/list/type_items = src.goods_buy[commodity_ref]
+				var/turf/T = get_turf(src)
+				for (var/i in 0 to qty)
+					var/obj/O = pick(type_items)
+					O.set_loc(T)
+					type_items.Remove(O)
+					if (!length(type_items))
+						src.selling_cart.Remove(commodity_ref)
+				. = TRUE
 			if ("toggle_crate")
 				include_crate = !include_crate
 				. = TRUE
-			if ("clear_cart")
+			if ("clear_shopping_cart")
 				src.shopping_cart.Cut()
+				. = TRUE
+			if ("clear_selling_cart")
+				var/turf/T = get_turf(src)
+				for (var/V in src.selling_cart)
+					for (var/obj/O in src.selling_cart[V])
+						O.set_loc(T)
+				src.selling_cart.Cut()
 				. = TRUE
 			if ("remove_card")
 				src.scan = null
@@ -233,8 +273,22 @@
 				"ref" = ref(C),
 				"quantity" = src.shopping_cart[C]
 				))
+		var/list/selling = list()
+		for (var/datum/commodity/C in src.selling_cart)
+			var/list/L = src.selling_cart[C]
+			total_tally -= C.price * length(L)
+			selling += list(list(
+				"name" = C.comname,
+				"desc" = C.desc,
+				"price" = C.price,
+				"baseprice" = C.baseprice,
+				"img" = getItemIcon(C.comtype, C = user.client),
+				"ref" = ref(C),
+				"quantity" = length(src.selling_cart[C])
+				))
 		return list(
 			"shopping_cart" = cart,
+			"selling_cart" = selling,
 			"dialogue" = src.temp ? src.temp : src.greeting,
 			"scanned_card" = src.scan?.name,
 			"card_credits" = 69420, //TEMP
@@ -246,23 +300,29 @@
 	ui_static_data(mob/user)
 		var/list/goods_sold = list()
 		var/list/goods_bought = list()
-		var/list/goods_illegal = list()
+		var/list/goods_for_crimers = list()
 		for (var/datum/commodity/C in src.goods_sell)
 			goods_sold += list(list("name" = C.comname, "desc" = C.desc, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
 		for (var/datum/commodity/C in src.goods_buy)
 			goods_bought += list(list("name" = C.comname, "desc" = C.desc_buy, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
 		for (var/datum/commodity/C in src.goods_illegal)
-			goods_illegal += list(list("name" = C.comname, "desc" = C.desc, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
+			goods_for_crimers += list(list("name" = C.comname, "desc" = C.desc, "price" = C.price, "baseprice" = C.baseprice, "img" = getItemIcon(C.comtype, C = user.client), "ref" = ref(C), "quantity" = C.amount))
 		var/icon/mugshot = resource("images/traders/[src.picture]")
 		return list(
 			"name" = src.name,
 			"mugshot" = mugshot,
-			"goods_sell" = src.goods_sold,
-			"goods_buy" = src.goods_bought,
-			"goods_illegal" = src.goods_illegal,
+			"goods_sell" = goods_sold,
+			"goods_buy" = goods_bought,
+			"goods_illegal" = goods_for_crimers,
 			"currency_name" = src.currency_name,
 			"currency_symbol" = src.currency_symbol
 		)
+
+	proc/get_commodity_for_object(obj/O)
+		for (var/datum/commodity/C in src.goods_buy + src.goods_sell + src.goods_illegal)
+			if (C.comtype == O.type)
+				return C
+		return null
 
 	proc/complete_purchase()
 		var/list/markers = new/list()
@@ -288,18 +348,22 @@
 			else
 				picked_location = get_turf(src) // put it SOMEWHERE
 
-		var/obj/storage/crate/A = include_crate ? new /obj/storage/crate(picked_location) : null
-		A?.name = "Goods Crate ([src.name])"
-		showswirl(picked_location)
-		for (var/i in 1 to length(src.shopping_cart))
-			var/datum/commodity/C = src.shopping_cart[i]
-			for (var/q in 1 to src.shopping_cart[C])
-				if (C.amount != -1)
-					C.amount--
-				var/atom/movable/AM = new C.comtype (picked_location)
-				if (istype(A))
-					AM.set_loc(A)
-		src.shopping_cart.Cut()
+		if (length(src.shopping_cart))
+			var/obj/storage/crate/A = include_crate ? new /obj/storage/crate(picked_location) : null
+			A?.name = "Goods Crate ([src.name])"
+			showswirl(picked_location)
+			for (var/i in 1 to length(src.shopping_cart))
+				var/datum/commodity/C = src.shopping_cart[i]
+				for (var/q in 1 to src.shopping_cart[C])
+					if (C.amount != -1)
+						C.amount--
+					var/atom/movable/AM = new C.comtype (picked_location)
+					if (istype(A))
+						AM.set_loc(A)
+			src.shopping_cart.Cut()
+		for (var/obj/O in src.selling_cart)
+			qdel(O)
+		src.selling_cart.Cut()
 
 	Topic(href, href_list)
 		if(..())
@@ -312,7 +376,7 @@
 		///////////////////////////////
 		var/list/goods_for_purchase = goods_sell.Copy()
 		// Illegal goods for syndicate traitors
-		if (illegal)
+		if (length(goods_illegal))
 			if(usr.mind && (istraitor(usr) || isspythief(usr) || isnukeop(usr) || usr.mind.special_role == ROLE_SLEEPER_AGENT || usr.mind.special_role == ROLE_OMNITRAITOR))
 				goods_for_purchase += goods_illegal
 		if (href_list["purchase"])
@@ -415,21 +479,6 @@
 		/////////////////////////////////////////////
 		///////Generate list of items user can sell//
 		/////////////////////////////////////////////
-		else if (href_list["sell"])
-			src.temp = "[src.sell_dialogue]<HR><BR>"
-			for(var/datum/commodity/N in goods_buy)
-				if(N.hidden)
-					continue
-				else
-					temp+={"<B>[N.comname] for [N.price] [currency_name]:</B> [N.indemand ? N.desc_buy_demand : N.desc_buy]<BR>
-							<A href='?src=\ref[src];haggles=[N]'><B><U>Haggle</U></B></A><BR><BR>"}
-			if(src.sellitem)
-				src.item_name = src.sellitem.name
-			else
-				src.item_name = "--------"
-			src.temp += {"<HR>What do you wish to sell? <a href='?src=\ref[src];sellitem=1'>[src.item_name]</a><br>
-						<BR><A href='?src=\ref[src];selltheitem=1'>Sell Item</A>
-						<BR><A href='?src=\ref[src];mainmenu=1'>Ok</A>"}
 
 		///////////////////////////////////////////
 		///Haggle for selling /////////////////////
@@ -454,41 +503,11 @@
 		////////////////////////////////////////
 		////////Slot holder for the current item///
 		///////////////////////////////////////
-		else if (href_list["sellitem"])
-			if (src.sellitem)
-				if (!doing_a_thing)
-					src.sellitem.set_loc(src.loc)
-					src.sellitem = null
-			else
-				var/obj/item/I = usr.equipped()
-				if (!I)
-					return
-				usr.drop_item()
-				// in case dropping the item somehow deletes it?? idk there was a runtime error still
-				if (!I)
-					return
-				I.set_loc(src)
-				src.sellitem = I
-				src.item_name = I.name
-			src.temp = "[src.sell_dialogue]<HR><BR>"
-			for(var/datum/commodity/N  in goods_buy)
-				if(N.hidden)
-					continue
-				else
-					temp+="<B>[N.comname] for [N.price] [currency_name]:</B> [N.indemand ? N.desc_buy_demand : N.desc_buy]<BR><BR>"
-			if(src.sellitem)
-				src.item_name = src.sellitem.name
-			else
-				src.item_name = "--------"
-			src.temp += {"<HR>What do you wish to sell? <a href='?src=\ref[src];sellitem=1'>[src.item_name]</a><br>
-							<BR><A href='?src=\ref[src];selltheitem=1'>Sell Item</A>
-							<BR><A href='?src=\ref[src];mainmenu=1'>Ok</A>
-							<BR><i>To sell large quantities at once, clickdrag a crate onto [src].</i>"}
 
 		///////////////////////////////////////////
 		/////////Actually Sell the item //////////
 		//////////////////////////////////////////
-		else if (href_list["selltheitem"])
+		/*else if (href_list["selltheitem"])
 			var/datum/db_record/account = null
 			if(!src.sellitem)
 				src.updateUsrDialog()
@@ -531,7 +550,7 @@
 					doing_a_thing = 0
 					return
 			src.temp = {"[pick(failed_sale_dialogue)]<BR>
-						<BR><A href='?src=\ref[src];sell=1'>OK</A>"}
+						<BR><A href='?src=\ref[src];sell=1'>OK</A>"}*/
 
 		///////////////////////////////////
 		////////Handle Bank account Set-Up ///////
@@ -588,8 +607,7 @@
 	/////Update the menu with the default items
 	////////////////////////////////////////////
 	proc/updatemenu(mob/user)
-		var/dat
-		dat = portrait_setup
+		var/dat = ""
 
 		if(barter)
 			if(!barter_customers[barter_lookup(user)])
@@ -657,25 +675,16 @@
 		if (buying == 1)
 			// we're buying, so we want to pay less per unit
 			if(askingprice > H.price)
-				if (src.bullshit >= 5)
-					src.temp = src.errormsgs[1]
-					H.price = askingprice
-					return
-				else
-					src.temp = src.errormsgs[2]
-					return
+				src.temp = src.errormsgs[1]
+				H.price = askingprice
+				return
 		else
 			// we're selling, so we want to be paid MORE per unit
 			if(askingprice < H.price)
-				if (src.bullshit >= 5)
-					H.price = askingprice
-					src.temp = "<B>Cost:</B> [H.price] [currency_name]<BR>"
-					src.temp += src.errormsgs[3]
-					return
-				else
-					src.temp = "<B>Cost:</B> [H.price] [currency_name]<BR>"
-					src.temp += src.errormsgs[4]
-					return
+				H.price = askingprice
+				src.temp = "<B>Cost:</B> [H.price] [currency_name]<BR>"
+				src.temp += src.errormsgs[3]
+				return
 		// check if the price increase % of the haggle is more than this trader will tolerate
 		var/hikeperc = askingprice - H.price
 		hikeperc = (hikeperc / H.price) * 100
@@ -823,8 +832,6 @@
 
 		greeting= {"WELL HI THERE, STEP RIGHT UP AND BUY MY STUFF!"}
 
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 		sell_dialogue = "Ah, an entrepreneur after my own heart!  I have a few friends who are looking for things to buy!"
 
 		buy_dialogue = "YES, COME RIGHT UP AND BUY MY FRIEND!"
@@ -933,8 +940,6 @@
 			<I>\"Greetings Human, unlike most martians, I am quite friendly. All I desire is to sell my wares\"</I>.
 			<b>[src.name]</b> gestures towards his goods and awaits for you to make your choice."}
 
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 		sell_dialogue = "You receive visions of various individuals who are looking to purchase something, and get the feeling that <B>[src.name]</B> will act as the middle man."
 
 		buy_dialogue = "You hear a voice in your head,<I>\"Please select what you would like to buy\".</I>"
@@ -977,8 +982,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot)
 	New()
 		..()
 		greeting= {"[src.name]'s eyes light up, and he states, \"Salutations organic, welcome to my shop. Please browse my wares.\""}
-
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
 
 		sell_dialogue = "[src.name] states, \"There are several individuals in my database that are looking to procure goods."
 
@@ -1079,7 +1082,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot)
 	name = "C.A.R.L."
 	icon = 'icons/mob/robots.dmi'
 	icon_state = "syndibot"
-	illegal = TRUE
 
 	New()
 		..()
@@ -1252,8 +1254,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot/robuddy)
 
 		greeting= {"[src.name] buzzes cheerfully."}
 
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 		sell_dialogue = "[src.name] bumbles a bit."
 
 		buy_dialogue = "[src.name] buzzes inquisitively."
@@ -1365,8 +1365,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot/robuddy)
 
 		greeting= {"Psst, I've got what you need HON- Ahem, disregard that."}
 
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 		sell_dialogue = "Waddya have to sell?"
 
 		buy_dialogue = "Feel free to browse my wares, but you better hurry!"
@@ -1432,8 +1430,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot/robuddy)
 
 		greeting= {"Hello there, space-faring friend."}
 
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 		sell_dialogue = "What can I relieve you of?"
 
 		buy_dialogue = "What would you like to purchase?"
@@ -1488,8 +1484,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot/robuddy)
 		/////////////////////////////////////////////////////////
 
 		greeting= {"Sup, man!"}
-
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
 
 		sell_dialogue = "Got anythin' good for me?"
 
@@ -1549,8 +1543,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot/robuddy)
 
 		greeting= {"<i>A hand sticking out from a toilet waves in your direction.</i>"}
 
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
-
 		sell_dialogue = "<i>A hand sticking out from a toilet points at itself.</i>"
 
 		buy_dialogue = "<i>A hand sticking out from a toilet points at you and beckons.</i>"
@@ -1606,8 +1598,6 @@ ABSTRACT_TYPE(/obj/npc/trader/robot/robuddy)
 		/////////////////////////////////////////////////////////
 
 		greeting= {"Oh thank God, we have a customer!"}
-
-		portrait_setup = "<img src='[resource("images/traders/[src.picture]")]'><HR><B>[src.name]</B><HR>"
 
 		sell_dialogue = "Please, use as much money as you can!"
 
