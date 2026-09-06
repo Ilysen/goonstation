@@ -329,7 +329,7 @@ TYPEINFO(/obj/item/card/emag)
 	/// name: Human-readable name.
 	/// state: Corresponding icon state in card.dmi.
 	/// keepState: (Optional) Maintain existing icon if the job is changed in an ID console.
-	var/list/card_styles = list(
+	var/static/list/card_styles = list(
 		list(name = "Plain", state = "id_basic"),
 		list(name = "Civilian", state = "id_civ"),
 		list(name = "Engineering", state = "id_eng"),
